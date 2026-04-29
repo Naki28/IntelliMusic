@@ -101,3 +101,91 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  P1 — Crash MiniPlayer Podcast
+   - Corriger MiniPlayer.tsx + PlayerContext.tsx pour gérer les podcasts sans crash
+   - Tabbar et MiniPlayer doivent rester visibles sur la page podcast
+  P2
+   - Intégrer NewBadge dans TrackRow + liste épisodes podcast
+   - Bouton Profil dans le header Home (déjà fait)
+   - Prefetch des 10 prochains morceaux d'une playlist + prefetch détails album/artiste depuis Home & Search
+
+backend:
+  - task: "Routes Deezer artist albums + info"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Ajout de GET /api/deezer/artist/{id}/albums et GET /api/deezer/artist/{id}"
+
+frontend:
+  - task: "Déplacement détail screens dans (tabs)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/(tabs)/{album,artist,podcast,playlist}/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Routes album/artist/podcast/playlist déplacées dans (tabs) avec href:null. Tabbar + MiniPlayer restent visibles. Vérifié visuellement: page /podcast/<id> affiche tabbar et MiniPlayer."
+
+  - task: "MiniPlayer refactor sans crash"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/MiniPlayer.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Pressable parent + bouton play/pause séparé (siblings, pas imbriqués). BlurView en pointerEvents:none. Null safety sur cover/title. Test: clic sur MiniPlayer en podcast → ouverture /player sans crash."
+
+  - task: "NewBadge dans TrackRow auto + épisodes podcast"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/TrackRow.tsx, /app/frontend/app/(tabs)/podcast/[id].tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "TrackRow détecte auto via release_date. Épisodes podcast affichent NOUVEAU si pub_date < 14j. Vérifié visuellement."
+
+  - task: "Prefetch album/artist + tracks"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/api/deezer.ts, /app/frontend/app/(tabs)/index.tsx, search.tsx, /app/frontend/src/context/PlayerContext.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Cache mémoire TTL 5min + déduplication inflight. Prefetch top 5 albums/artistes depuis Home et Search. PlayerContext prefetch les 10 prochains tracks au démarrage d'une queue."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Routes Deezer artist albums + info"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "P1+P2 implémentés. Nouvelles routes backend: /api/deezer/artist/{id}/albums et /api/deezer/artist/{id}. À tester. Frontend validé visuellement (login démo naki28/naki28, navigation Podcasts → LEGEND → épisode → MiniPlayer → /player sans crash)."
