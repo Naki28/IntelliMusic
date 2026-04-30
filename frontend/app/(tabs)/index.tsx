@@ -120,12 +120,17 @@ export default function HomeView() {
             <SectionHeader overline="Sorties" title="Nouveautés de la semaine" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
               {newReleases.map((a) => (
-                <TouchableOpacity key={a.id} onPress={() => router.push(`/album/${a.id}`)}>
-                  <View>
-                    {isRecent((a as any).release_date, 7) ? <View style={{ position: "absolute", top: 6, left: 6, zIndex: 5 }}><NewBadge small /></View> : null}
-                    <AlbumCard testID={`album-${a.id}`} imageUri={a.cover_big || a.cover_medium || a.cover || ""} title={a.title} subtitle={a.artist?.name} size={150} />
-                  </View>
-                </TouchableOpacity>
+                <View key={a.id}>
+                  {isRecent((a as any).release_date, 7) ? <View style={{ position: "absolute", top: 6, left: 6, zIndex: 5 }}><NewBadge small /></View> : null}
+                  <AlbumCard
+                    testID={`album-${a.id}`}
+                    imageUri={a.cover_big || a.cover_medium || a.cover || ""}
+                    title={a.title}
+                    subtitle={a.artist?.name}
+                    size={150}
+                    onPress={() => router.push(`/album/${a.id}`)}
+                  />
+                </View>
               ))}
             </ScrollView>
           </>
@@ -153,9 +158,15 @@ export default function HomeView() {
             <SectionHeader overline="Stars" title={reco?.trending_artists?.length ? "Tes artistes du moment" : "Artistes du moment"} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
               {trendingArtists.map((a) => (
-                <TouchableOpacity key={a.id} onPress={() => router.push(`/artist/${a.id}`)}>
-                  <AlbumCard testID={`artist-${a.id}`} imageUri={a.picture_big || a.picture_medium || ""} title={a.name} size={120} rounded />
-                </TouchableOpacity>
+                <AlbumCard
+                  key={a.id}
+                  testID={`artist-${a.id}`}
+                  imageUri={a.picture_big || a.picture_medium || ""}
+                  title={a.name}
+                  size={120}
+                  rounded
+                  onPress={() => router.push(`/artist/${a.id}`)}
+                />
               ))}
             </ScrollView>
           </>

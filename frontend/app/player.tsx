@@ -1,4 +1,6 @@
-// PlayerView — Lecteur plein écran (titre ou stream radio)
+// PlayerView — Lecteur plein écran (titre ou stream radio/podcast)
+// Fix crash podcast: coerce isStream/isLive to boolean (était un object -> Fabric renderer crash)
+// Nom d'artiste cliquable -> navigation vers /artist/{id}
 import React from "react";
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,19 +23,16 @@ export default function PlayerView() {
   const { mode, currentTrack, stream, isPlaying, isLoading, positionMs, durationMs, togglePlay, next, previous, seekTo } = usePlayer();
   const { isFavorite, toggleFavorite } = useFavorites();
 
-  const isStream = mode === "stream" && stream;
+  // ⚠ IMPORTANT : garantir des booléens (et non des objets) sinon Fabric crash
+  const isStream = mode === "stream" && !!stream;
   const isPodcast = isStream && stream?.kind === "podcast";
-  const isLive = isStream && stream?.kind !== "podcast"; // radio en direct
-  const cover = isStream ? stream.artwork : currentTrack?.album.cover_xl || currentTrack?.album.cover_big;
-  const title = isStream ? stream.name : currentTrack?.title;
-  const subtitle = isStream ? (stream.subtitle || "En direct") : currentTrack?.artist.name;
+  const isLive = isStream && stream?.kind !== "podcast";
+  const cover = isStream ? stream!.artwork : currentTrack?.album.cover_xl || currentTrack?.album.cover_big;
+  const title = isStream ? stream!.name : currentTrack?.title;
+  const subtitle = isStream ? (stream!.subtitle || "En direct") : currentTrack?.artist?.name;
 
-  // Pour les tracks Deezer, on utilise la durée officielle (track.duration en s)
-  // comme référence si elle est présente, pour éviter les écarts yt-dlp (intros/outros).
   const officialDurMs = currentTrack?.duration ? currentTrack.duration * 1000 : 0;
-  const effectiveDurationMs = !isStream && officialDurMs > 0
-    ? officialDurMs
-    : durationMs;
+  const effectiveDurationMs = !isStream && officialDurMs > 0 ? officialDurMs : durationMs;
   const effectivePositionMs = Math.min(positionMs, effectiveDurationMs || positionMs);
 
   if (!isStream && !currentTrack) {
@@ -50,6 +49,21 @@ export default function PlayerView() {
   }
 
   const fav = currentTrack ? isFavorite(currentTrack.id) : false;
+  const artistId = !isStream ? currentTrack?.artist?.id : null;
+
+  const goToArtist = () => {
+    if (artistId) {
+      router.back(); // ferme le modal
+      setTimeout(() => router.push(`/artist/${artistId}`), 120);
+    }
+  };
+  const goToAlbum = () => {
+    if (!isStream && currentTrack?.album?.id) {
+      const aid = currentTrack.album.id;
+      router.back();
+      setTimeout(() => router.push(`/album/${aid}`), 120);
+    }
+  };
 
   return (
     <View style={styles.container} testID="player-view">
@@ -63,7 +77,15 @@ export default function PlayerView() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerOverline}>{isLive ? "EN DIRECT" : isPodcast ? "PODCAST" : "EN LECTURE"}</Text>
-            <Text style={styles.headerTitle} numberOfLines={1}>{isPodcast ? stream?.subtitle : isLive ? "IntelliRadio" : currentTrack?.album.title}</Text>
+            <TouchableOpacity
+              disabled={isStream || !currentTrack?.album?.id}
+              onPress={goToAlbum}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {isPodcast ? stream?.subtitle : isLive ? "IntelliRadio" : currentTrack?.album?.title}
+              </Text>
+            </TouchableOpacity>
           </View>
           <View style={{ width: 28 }} />
         </View>
@@ -71,7 +93,7 @@ export default function PlayerView() {
         <View style={styles.coverWrap}>
           {cover ? <Image source={{ uri: cover }} style={styles.cover} /> : (
             <View style={[styles.cover, { alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }]}>
-              <Ionicons name="radio" size={64} color={colors.primary} />
+              <Ionicons name={isPodcast ? "mic" : "radio"} size={64} color={colors.primary} />
             </View>
           )}
         </View>
@@ -79,7 +101,13 @@ export default function PlayerView() {
         <View style={styles.info}>
           <View style={{ flex: 1 }}>
             <Text style={styles.trackTitle} numberOfLines={2}>{title}</Text>
-            <Text style={styles.trackArtist}>{subtitle}</Text>
+            {artistId ? (
+              <TouchableOpacity testID="player-artist-link" onPress={goToArtist} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Text style={[styles.trackArtist, styles.artistLink]}>{subtitle}</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.trackArtist}>{subtitle}</Text>
+            )}
           </View>
           {!isStream && currentTrack ? (
             <TouchableOpacity testID="player-fav" onPress={() => toggleFavorite(currentTrack)} hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}>
@@ -114,19 +142,19 @@ export default function PlayerView() {
         )}
 
         <View style={styles.controls}>
-          <TouchableOpacity hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }} disabled={isStream}>
+          <TouchableOpacity hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }} disabled={!!isStream}>
             <Ionicons name="shuffle" size={24} color={isStream ? colors.textTertiary : colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity testID="player-prev" onPress={isPodcast ? () => seekTo(Math.max(0, positionMs - 15000)) : previous} disabled={isLive}>
+          <TouchableOpacity testID="player-prev" onPress={isPodcast ? () => seekTo(Math.max(0, positionMs - 15000)) : previous} disabled={!!isLive}>
             <Ionicons name={isPodcast ? "play-back" : "play-skip-back"} size={36} color={isLive ? colors.textTertiary : colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity testID="player-play-pause" onPress={togglePlay} style={styles.playMain}>
             {isLoading ? <ActivityIndicator color="#fff" size="large" /> : <Ionicons name={isPlaying ? "pause" : "play"} size={36} color="#fff" />}
           </TouchableOpacity>
-          <TouchableOpacity testID="player-next" onPress={isPodcast ? () => seekTo(positionMs + 30000) : next} disabled={isLive}>
+          <TouchableOpacity testID="player-next" onPress={isPodcast ? () => seekTo(positionMs + 30000) : next} disabled={!!isLive}>
             <Ionicons name={isPodcast ? "play-forward" : "play-skip-forward"} size={36} color={isLive ? colors.textTertiary : colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }} disabled={isStream}>
+          <TouchableOpacity hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }} disabled={!!isStream}>
             <Ionicons name="repeat" size={24} color={isStream ? colors.textTertiary : colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -152,6 +180,7 @@ const styles = StyleSheet.create({
   info: { flexDirection: "row", alignItems: "center", paddingTop: spacing.md },
   trackTitle: { color: colors.textPrimary, fontFamily: fonts.heading, fontSize: 24, letterSpacing: -0.5 },
   trackArtist: { color: colors.textSecondary, fontFamily: fonts.bodyMed, fontSize: 15, marginTop: 4 },
+  artistLink: { color: colors.textPrimary, textDecorationLine: "underline" },
   sliderWrap: { marginTop: spacing.lg },
   slider: { width: "100%", height: 36 },
   timeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: -4 },

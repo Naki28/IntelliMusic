@@ -30,11 +30,11 @@ export default function TabsLayout() {
         <Tabs.Screen name="podcasts" options={{ title: "Podcasts", tabBarIcon: ({ color, size }) => <Ionicons name="mic" color={color} size={size} />, tabBarButtonTestID: "tab-podcasts" }} />
         <Tabs.Screen name="library" options={{ title: "Bibliothèque", tabBarIcon: ({ color, size }) => <Ionicons name="library" color={color} size={size} />, tabBarButtonTestID: "tab-library" }} />
         <Tabs.Screen name="profile" options={{ href: null }} />
-        {/* Pages détail dans le groupe (tabs) → la tabbar et le MiniPlayer restent visibles */}
-        <Tabs.Screen name="album/[id]" options={{ href: null }} />
-        <Tabs.Screen name="artist/[id]" options={{ href: null }} />
-        <Tabs.Screen name="podcast/[id]" options={{ href: null }} />
-        <Tabs.Screen name="playlist/[id]" options={{ href: null }} />
+        {/* Stacks imbriqués pour pages détail → la tabbar + MiniPlayer restent visibles */}
+        <Tabs.Screen name="album" options={{ href: null }} />
+        <Tabs.Screen name="artist" options={{ href: null }} />
+        <Tabs.Screen name="podcast" options={{ href: null }} />
+        <Tabs.Screen name="playlist" options={{ href: null }} />
       </Tabs>
       <MiniPlayer />
     </View>

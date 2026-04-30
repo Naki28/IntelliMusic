@@ -141,45 +141,48 @@ export default function SearchView() {
           {tab === "albums" && (
             <View style={styles.grid}>
               {albums.map((a) => (
-                <TouchableOpacity key={a.id} onPress={() => router.push(`/album/${a.id}`)} style={styles.gridItem}>
+                <View key={a.id} style={styles.gridItem}>
                   <AlbumCard
                     testID={`search-album-${a.id}`}
                     imageUri={a.cover_big || a.cover_medium || ""}
                     title={a.title}
                     subtitle={a.artist?.name}
                     size={150}
+                    onPress={() => router.push(`/album/${a.id}`)}
                   />
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
           {tab === "artists" && (
             <View style={styles.grid}>
               {artists.map((a) => (
-                <TouchableOpacity key={a.id} onPress={() => router.push(`/artist/${a.id}`)} style={styles.gridItem}>
+                <View key={a.id} style={styles.gridItem}>
                   <AlbumCard
                     testID={`search-artist-${a.id}`}
                     imageUri={a.picture_big || a.picture_medium || ""}
                     title={a.name}
                     size={120}
                     rounded
+                    onPress={() => router.push(`/artist/${a.id}`)}
                   />
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
           {tab === "podcasts" && (
             <View style={styles.grid}>
               {podcasts.map((p) => (
-                <TouchableOpacity key={p.collectionId} onPress={() => router.push(`/podcast/${p.collectionId}`)} style={styles.gridItem}>
+                <View key={p.collectionId} style={styles.gridItem}>
                   <AlbumCard
                     testID={`search-podcast-${p.collectionId}`}
                     imageUri={p.artworkUrl600 || ""}
                     title={p.collectionName || ""}
                     subtitle={p.artistName}
                     size={150}
+                    onPress={() => router.push(`/podcast/${p.collectionId}`)}
                   />
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}

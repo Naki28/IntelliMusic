@@ -103,9 +103,15 @@ export default function ArtistDetail() {
               <SectionHeader overline="Discographie" title={`Albums (${albums.length})`} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
                 {albums.map((a) => (
-                  <TouchableOpacity key={a.id} onPress={() => router.push(`/album/${a.id}`)}>
-                    <AlbumCard testID={`artist-album-${a.id}`} imageUri={a.cover_big || a.cover_medium || ""} title={a.title} subtitle={a.release_date?.slice(0, 4)} size={140} />
-                  </TouchableOpacity>
+                  <AlbumCard
+                    key={a.id}
+                    testID={`artist-album-${a.id}`}
+                    imageUri={a.cover_big || a.cover_medium || ""}
+                    title={a.title}
+                    subtitle={a.release_date?.slice(0, 4)}
+                    size={140}
+                    onPress={() => router.push(`/album/${a.id}`)}
+                  />
                 ))}
               </ScrollView>
             </>
