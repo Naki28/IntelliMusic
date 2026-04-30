@@ -12,6 +12,7 @@ import { FavoritesProvider } from "../src/context/FavoritesContext";
 import { PlaylistsProvider } from "../src/context/PlaylistsContext";
 import { LibraryProvider } from "../src/context/LibraryContext";
 import { PodcastProgressProvider } from "../src/context/PodcastProgressContext";
+import { HistoryProvider } from "../src/context/HistoryContext";
 import { colors } from "../src/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -72,16 +73,18 @@ export default function RootLayout() {
         <LibraryProvider>
           <PlaylistsProvider>
             <PodcastProgressProvider>
-              <PlayerProvider>
-                <StatusBar style="light" />
-                <AuthCallbackHandler />
-                <AuthGate />
-                <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-                  <Stack.Screen name="login" />
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="player" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
-                </Stack>
-              </PlayerProvider>
+              <HistoryProvider>
+                <PlayerProvider>
+                  <StatusBar style="light" />
+                  <AuthCallbackHandler />
+                  <AuthGate />
+                  <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+                    <Stack.Screen name="login" />
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="player" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  </Stack>
+                </PlayerProvider>
+              </HistoryProvider>
             </PodcastProgressProvider>
           </PlaylistsProvider>
         </LibraryProvider>

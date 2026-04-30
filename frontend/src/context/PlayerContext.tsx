@@ -6,6 +6,7 @@ import { Audio, AVPlaybackStatus } from "expo-av";
 import type { Track } from "../types/music";
 import { resolveFullStream, FullStreamPref } from "../api/client";
 import { usePodcastProgress } from "./PodcastProgressContext";
+import { useHistory } from "./HistoryContext";
 
 // ========== Types ==========
 export interface StreamInfo {
@@ -46,6 +47,7 @@ interface PlayerState {
   isFullStreamMode: boolean;
   positionMs: number;
   durationMs: number;
+  bufferedMs: number;
 
   // Nouveaux states
   volume: number; // 0..1
@@ -103,6 +105,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 // ========== Provider ==========
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const { getProgress, saveProgress, markCompleted } = usePodcastProgress();
+  const { record: recordHistory } = useHistory();
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const [mode, setMode] = useState<PlayerMode>("idle");
@@ -114,6 +117,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [positionMs, setPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
+  const [bufferedMs, setBufferedMs] = useState(0);
   const [isFullStreamMode, setIsFullStreamMode] = useState(false);
 
   // Nouveaux states
@@ -247,6 +251,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setStream(null);
         setMode("track");
         setIndex(idx);
+
+        // Enregistrer dans l'historique
+        recordHistory(item.track);
 
         let uri = item.track.preview;
         if (isFullStreamMode) {

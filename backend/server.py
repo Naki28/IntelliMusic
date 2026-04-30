@@ -664,6 +664,269 @@ async def intelliradio_schedule():
     return {"programs": INTELLIRADIO_PROGRAMS}
 
 
+@api_router.post("/profile/avatar")
+async def update_avatar(payload: dict, user: User = Depends(get_current_user)):
+    """Met à jour la photo de profil (base64 data URI ou URL externe)."""
+    picture = payload.get("picture")
+    if not picture or not isinstance(picture, str):
+        raise HTTPException(status_code=400, detail="picture requis")
+    # Limite taille base64 ~2MB
+    if picture.startswith("data:") and len(picture) > 2_800_000:
+        raise HTTPException(status_code=413, detail="Image trop grande (max 2 MB)")
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"picture": picture}})
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    return User(**user_doc)
+
+
+# ---------- History (titres écoutés) ----------
+@api_router.post("/history")
+async def record_history(payload: TrackPayload, user: User = Depends(get_current_user)):
+    """Enregistre un titre dans l'historique d'écoute (upsert → met à jour la date de dernière écoute)."""
+    track = payload.track
+    if not track.get("id"):
+        raise HTTPException(status_code=400, detail="track.id requis")
+    await db.history.update_one(
+        {"user_id": user.user_id, "track_id": track["id"]},
+        {"$set": {
+            "user_id": user.user_id,
+            "track_id": track["id"],
+            "track": track,
+            "played_at": datetime.now(timezone.utc),
+        }, "$inc": {"play_count": 1}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.get("/history/recent")
+async def recent_history(limit: int = 20, user: User = Depends(get_current_user)):
+    docs = await db.history.find({"user_id": user.user_id}, {"_id": 0}).sort("played_at", -1).limit(limit).to_list(limit)
+    return {"data": [d["track"] for d in docs]}
+
+
+@api_router.get("/history/top-artists")
+async def top_listened_artists(limit: int = 5, user: User = Depends(get_current_user)):
+    """Retourne les artistes les plus écoutés (agrégation par play_count)."""
+    pipeline = [
+        {"$match": {"user_id": user.user_id}},
+        {"$group": {"_id": "$track.artist.id", "name": {"$first": "$track.artist.name"}, "plays": {"$sum": "$play_count"}}},
+        {"$sort": {"plays": -1}},
+        {"$limit": limit},
+    ]
+    out = await db.history.aggregate(pipeline).to_list(limit)
+    return {"data": [{"id": x["_id"], "name": x["name"], "plays": x["plays"]} for x in out if x.get("name")]}
+
+
+# ---------- Track radio (pour auto-queue similaires) ----------
+@api_router.get("/deezer/track/{track_id}/radio")
+async def deezer_track_radio(track_id: int):
+    """Tracks similaires à un track donné (Deezer endpoint)."""
+    return await deezer_get(f"/track/{track_id}/radio")
+
+
+@api_router.get("/deezer/artist/{artist_id}/radio")
+async def deezer_artist_radio(artist_id: int):
+    return await deezer_get(f"/artist/{artist_id}/radio")
+
+
+# ---------- Bulk search pour import TXT/CSV ----------
+class BulkSearchPayload(BaseModel):
+    queries: List[str]
+
+@api_router.post("/search-tracks-bulk")
+async def search_tracks_bulk(payload: BulkSearchPayload):
+    """Recherche un lot de requêtes (ex: 'Drake - One Dance') et retourne le meilleur match pour chacune.
+    Utilisé par l'import TXT/CSV."""
+    queries = [q.strip() for q in (payload.queries or []) if q and q.strip()]
+    if not queries:
+        return {"results": []}
+    if len(queries) > 300:
+        raise HTTPException(status_code=400, detail="Max 300 requêtes par lot")
+
+    import asyncio
+    async def one(q: str):
+        try:
+            r = await deezer_get("/search", {"q": q, "limit": 1})
+            data = r.get("data", [])
+            return {"query": q, "track": data[0] if data else None}
+        except Exception:
+            return {"query": q, "track": None}
+
+    # Parallèle mais contrôlé (semaphore)
+    sem = asyncio.Semaphore(8)
+    async def guarded(q):
+        async with sem:
+            return await one(q)
+    results = await asyncio.gather(*[guarded(q) for q in queries])
+    return {"results": results}
+
+
+# ---------- IntelliRadio — programme du jour avec horloge virtuelle ----------
+INTELLIRADIO_DAILY_CACHE: dict = {}  # {user_id+slot+date : {"tracks": [...], "generated_at": ts}}
+
+
+async def _build_daily_program(user: User, slot_key: str, program: dict, target_count: int = 80) -> List[dict]:
+    """Construit une liste de ~80 titres pour le slot, seed jour + user_id → change chaque jour, stable durant la journée."""
+    date_str = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+    cache_key = f"{user.user_id}|{slot_key}|{date_str}"
+    cached = INTELLIRADIO_DAILY_CACHE.get(cache_key)
+    if cached and _time.time() - cached["t"] < 6 * 3600:
+        return cached["tracks"]
+
+    seeds: List[dict] = []
+    # Artistes préférés (profile + suivis)
+    saved_artists_docs = await db.saved_artists.find({"user_id": user.user_id}, {"_id": 0}).to_list(50)
+    saved_artist_names = [a["artist"]["name"] for a in saved_artists_docs if a.get("artist", {}).get("name")]
+    artists_pool = list(dict.fromkeys((user.favorite_artists or []) + saved_artist_names))[:8]
+    for artist_name in artists_pool:
+        try:
+            res = await deezer_get("/search/artist", {"q": artist_name, "limit": 1})
+            if res.get("data"):
+                aid = res["data"][0]["id"]
+                top = await deezer_get(f"/artist/{aid}/top", {"limit": 15})
+                seeds.extend(top.get("data", []))
+                try:
+                    radio = await deezer_get(f"/artist/{aid}/radio", {"limit": 15})
+                    seeds.extend(radio.get("data", []))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Genres préférés (biaisés vers pré-2016 pour Classics)
+    for genre in (user.favorite_genres or [])[:3]:
+        try:
+            q = genre
+            if program.get("year_max") and program["year_max"] < 2016:
+                q = f"{genre} 2010"
+            res = await deezer_get("/search", {"q": q, "limit": 25})
+            seeds.extend(res.get("data", []))
+        except Exception:
+            pass
+
+    # Top artistes écoutés (basé sur historique)
+    try:
+        pipeline = [
+            {"$match": {"user_id": user.user_id}},
+            {"$group": {"_id": "$track.artist.id", "plays": {"$sum": "$play_count"}}},
+            {"$sort": {"plays": -1}},
+            {"$limit": 5},
+        ]
+        top_listened = await db.history.aggregate(pipeline).to_list(5)
+        for item in top_listened:
+            aid = item.get("_id")
+            if aid:
+                try:
+                    tops = await deezer_get(f"/artist/{aid}/top", {"limit": 10})
+                    seeds.extend(tops.get("data", []))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Favoris
+    favs = await db.favorites.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    seeds.extend([f["track"] for f in favs])
+
+    # Fallback chart
+    if len(seeds) < 30:
+        try:
+            chart = await deezer_get("/chart")
+            seeds.extend(chart.get("tracks", {}).get("data", []))
+        except Exception:
+            pass
+
+    # Dédoublonnage
+    seen = set()
+    unique = []
+    for t in seeds:
+        if t.get("id") and t["id"] not in seen and t.get("preview"):
+            seen.add(t["id"])
+            unique.append(t)
+
+    filtered = filter_tracks_by_year(unique, program.get("year_min"), program.get("year_max"))
+    if len(filtered) < 20:
+        filtered = unique
+
+    # Mélange déterministe : seed = user_id + slot + date → stable durant 24h, change chaque jour
+    import random as _random
+    rng = _random.Random(f"{user.user_id}|{slot_key}|{date_str}")
+    rng.shuffle(filtered)
+
+    # On prend target_count titres (ou ce qu'on a)
+    result = filtered[:target_count]
+    INTELLIRADIO_DAILY_CACHE[cache_key] = {"t": _time.time(), "tracks": result}
+    return result
+
+
+@api_router.get("/intelliradio/daily")
+async def intelliradio_daily(user: User = Depends(get_current_user)):
+    """Programme du jour complet + position virtuelle (track "live" au moment courant).
+
+    Calcul :
+    - On construit une playlist stable pour l'user+slot+date.
+    - Position virtuelle = seconds écoulées depuis le début du slot modulo la durée totale de la playlist.
+    - Le client peut ainsi se "tuner" au track live et au bon timecode.
+    """
+    now = datetime.now(ZoneInfo("Europe/Paris"))
+    hour = now.hour + now.minute / 60.0
+    prog = current_program(hour)
+
+    if prog["kind"] == "rmc":
+        return {"program": prog, "live": True, "tracks": [], "stream_url": RMC_STREAM_URL, "virtual_position_sec": 0, "current_index": 0}
+
+    slot = prog["slot"]
+    tracks = await _build_daily_program(user, slot, prog)
+    if not tracks:
+        return {"program": prog, "live": False, "tracks": [], "virtual_position_sec": 0, "current_index": 0}
+
+    # Calcul du début du slot en secondes depuis minuit
+    slot_start = prog["start"] * 3600.0
+    # Secondes écoulées depuis minuit (heure locale Paris)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed_today = (now - midnight).total_seconds()
+    # Gère le slot qui chevauche minuit : si on est dans le slot APRÈS minuit, on ajoute 24h à "elapsed"
+    if prog["start"] > prog["end"] and hour < prog["end"]:
+        elapsed_in_slot = elapsed_today + (24 * 3600 - slot_start)
+    else:
+        elapsed_in_slot = max(0.0, elapsed_today - slot_start)
+
+    # Durée totale de la playlist
+    total = 0
+    cumulative = []  # cumul de la durée (en sec) à la fin de chaque track
+    for t in tracks:
+        dur = int(t.get("duration") or 30)
+        total += dur
+        cumulative.append(total)
+
+    # Position virtuelle modulo la durée totale → la playlist tourne en boucle sur le slot
+    if total <= 0:
+        vpos = 0.0
+    else:
+        vpos = elapsed_in_slot % total
+
+    # Trouve le track courant
+    current_idx = 0
+    offset_in_track = vpos
+    for i, c in enumerate(cumulative):
+        if vpos < c:
+            current_idx = i
+            prev = cumulative[i - 1] if i > 0 else 0
+            offset_in_track = vpos - prev
+            break
+
+    return {
+        "program": prog,
+        "live": False,
+        "tracks": tracks,
+        "current_index": current_idx,
+        "offset_in_track_sec": offset_in_track,
+        "virtual_position_sec": vpos,
+        "total_duration_sec": total,
+        "slot_start_ts": midnight.timestamp() + slot_start,
+    }
+
+
 # ---------- Recommendations par pays ----------
 @api_router.get("/recommendations")
 async def recommendations(user: User = Depends(get_current_user)):

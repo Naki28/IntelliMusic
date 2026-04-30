@@ -17,6 +17,7 @@ import AlbumCard from "../../src/components/AlbumCard";
 import NewBadge, { isRecent } from "../../src/components/NewBadge";
 import { usePlayer } from "../../src/context/PlayerContext";
 import { useAuth } from "../../src/context/AuthContext";
+import { useHistory } from "../../src/context/HistoryContext";
 import { showToast } from "../../src/lib/toast";
 
 interface HomeReco { for_you_tracks: Track[]; trending_artists: Artist[]; new_releases: Album[]; }
@@ -24,6 +25,7 @@ interface HomeReco { for_you_tracks: Track[]; trending_artists: Artist[]; new_re
 export default function HomeView() {
   const router = useRouter();
   const { user } = useAuth();
+  const { recent: recentHistory, refresh: refreshHistory } = useHistory();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function HomeView() {
   };
 
   useEffect(() => { load(); }, []);
-  const onRefresh = () => { setRefreshing(true); load(); };
+  const onRefresh = () => { setRefreshing(true); load(); refreshHistory(); };
 
   // Prefetch : dès qu'on a les listes, on chauffe le cache des détails
   // → cliquer sur un album/artiste ouvre la page quasi-instantanément
@@ -116,6 +118,32 @@ export default function HomeView() {
               <View style={styles.heroPlay}><Ionicons name="play" size={18} color="#fff" /><Text style={styles.heroPlayText}>Lire maintenant</Text></View>
             </View>
           </TouchableOpacity>
+        ) : null}
+
+        {/* Section Récemment écoutés */}
+        {recentHistory.length > 0 ? (
+          <>
+            <SectionHeader overline="Historique" title="Récemment écoutés" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+              {recentHistory.slice(0, 15).map((t, i) => (
+                <TouchableOpacity
+                  key={`recent-${t.id}-${i}`}
+                  testID={`recent-track-${t.id}`}
+                  activeOpacity={0.8}
+                  onPress={() => playQueue(recentHistory, i)}
+                  onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+                  style={styles.recentCard}
+                >
+                  <Image
+                    source={{ uri: t.album?.cover_medium || t.album?.cover || "" }}
+                    style={styles.recentImg}
+                  />
+                  <Text style={styles.recentTitle} numberOfLines={1}>{t.title}</Text>
+                  <Text style={styles.recentArtist} numberOfLines={1}>{t.artist?.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
         ) : null}
 
         <SectionHeader overline={reco?.for_you_tracks?.length ? "Pour toi" : "Tendances"} title={reco?.for_you_tracks?.length ? "Suggestions personnalisées" : "Top Charts"} />
@@ -219,4 +247,9 @@ const styles = StyleSheet.create({
   genreCard: { width: "48%", height: 90, borderRadius: radii.md, overflow: "hidden", marginBottom: spacing.md, backgroundColor: colors.surface, justifyContent: "flex-end", padding: spacing.sm },
   genreImg: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   genreName: { color: "#fff", fontFamily: fonts.bodyBold, fontSize: 16 },
+  // Récemment écoutés
+  recentCard: { width: 120, marginRight: spacing.md },
+  recentImg: { width: 120, height: 120, borderRadius: radii.md, backgroundColor: colors.surface, marginBottom: spacing.xs },
+  recentTitle: { color: colors.textPrimary, fontFamily: fonts.bodyMed, fontSize: 13, lineHeight: 17 },
+  recentArtist: { color: colors.textSecondary, fontFamily: fonts.body, fontSize: 12 },
 });
