@@ -396,6 +396,11 @@ export default function LibraryView() {
              section === "artists" ? savedArtists.length : 0}
           </Text>
         )}
+        {section === "overview" && (
+          <TouchableOpacity onPress={() => router.push("/import")} style={styles.importBtn}>
+            <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Content */}
@@ -460,6 +465,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: radii.pill,
+  },
+  importBtn: {
+    padding: spacing.xs,
+    marginLeft: "auto",
   },
   content: { flex: 1 },
   overviewContent: { paddingBottom: 220 },

@@ -591,12 +591,29 @@ def filter_tracks_by_year(tracks: List[dict], year_min: Optional[int], year_max:
 
 
 @api_router.get("/intelliradio")
-async def intelliradio(user: User = Depends(get_current_user)):
-    """Programme courant + queue de titres adaptés à l'user."""
+async def intelliradio(user: User = Depends(get_current_user), mode: str = Query(None)):
+    """Programme courant + queue de titres adaptés à l'user.
+    
+    ?mode=classic → Force le mode Classic (<2016)
+    ?mode=live → Utilise l'horloge virtuelle (rejoint le programme "en direct")
+    """
     # Heure réelle en France (gère automatiquement l'heure d'été/hiver via zoneinfo)
     now = datetime.now(ZoneInfo("Europe/Paris"))
     hour = now.hour + now.minute / 60.0
     prog = current_program(hour)
+    
+    # Mode Classic forcé : on utilise le programme Classics (14h-16h) peu importe l'heure
+    if mode == "classic":
+        prog = {
+            "slot": "classic-mode",
+            "start": 0,
+            "end": 24,
+            "name": "IntelliRadio Classics",
+            "tagline": "Avant 2016, vos genres",
+            "kind": "music",
+            "year_max": 2015,
+            "year_min": None,
+        }
 
     # RMC = stream direct, pas de queue
     if prog["kind"] == "rmc":
