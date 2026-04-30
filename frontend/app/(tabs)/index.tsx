@@ -18,6 +18,7 @@ import NewBadge, { isRecent } from "../../src/components/NewBadge";
 import { usePlayer } from "../../src/context/PlayerContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useHistory } from "../../src/context/HistoryContext";
+import { useContextMenu } from "../../src/context/ContextMenuContext";
 import { showToast } from "../../src/lib/toast";
 
 interface HomeReco { for_you_tracks: Track[]; trending_artists: Artist[]; new_releases: Album[]; }
@@ -26,6 +27,7 @@ export default function HomeView() {
   const router = useRouter();
   const { user } = useAuth();
   const { recent: recentHistory, refresh: refreshHistory } = useHistory();
+  const { openTrackMenu, openAlbumMenu } = useContextMenu();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +133,8 @@ export default function HomeView() {
                   testID={`recent-track-${t.id}`}
                   activeOpacity={0.8}
                   onPress={() => playQueue(recentHistory, i)}
-                  onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+                  onLongPress={() => openTrackMenu(t)}
+                  delayLongPress={400}
                   style={styles.recentCard}
                 >
                   <Image
@@ -154,7 +157,7 @@ export default function HomeView() {
               track={t}
               index={i}
               onPress={() => playQueue(personalTracks, i)}
-              onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+              onLongPress={() => openTrackMenu(t)}
             />
           ))}
         </View>

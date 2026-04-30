@@ -17,9 +17,11 @@ import { useRouter } from "expo-router";
 import { DeezerAPI } from "../../src/api/deezer";
 import type { Track, Album, Artist } from "../../src/types/music";
 import { colors, fonts, radii, spacing } from "../../src/theme";
+import SectionHeader from "../../src/components/SectionHeader";
 import TrackRow from "../../src/components/TrackRow";
 import AlbumCard from "../../src/components/AlbumCard";
 import { usePlayer } from "../../src/context/PlayerContext";
+import { useContextMenu } from "../../src/context/ContextMenuContext";
 import { showToast } from "../../src/lib/toast";
 
 type Tab = "tracks" | "albums" | "artists" | "podcasts";
@@ -37,7 +39,8 @@ export default function SearchView() {
   const [podcasts, setPodcasts] = useState<ITunesPodcastResult[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const { playQueue, addToQueue } = usePlayer();
+  const { playQueue, addToQueue, playWithSmartQueue } = usePlayer();
+  const { openTrackMenu, openAlbumMenu, openArtistMenu } = useContextMenu();
 
   // Long press sur un album → ajoute tous ses titres à la file
   const handleAlbumLongPress = async (albumId: number) => {
@@ -145,8 +148,8 @@ export default function SearchView() {
               <TrackRow
                 key={t.id}
                 track={t}
-                onPress={() => playQueue(tracks, i)}
-                onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+                onPress={() => playWithSmartQueue(t, tracks)}
+                onLongPress={() => openTrackMenu(t)}
               />
             ))}
           {tab === "albums" && (

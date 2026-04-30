@@ -70,6 +70,9 @@ interface PlayerState {
   removeFromQueue: (idx: number) => void;
   jumpTo: (idx: number) => Promise<void>;
   clearQueue: () => void;
+  
+  // Queue intelligente - Auto-fill avec tracks similaires depuis recherche
+  playWithSmartQueue: (track: Track, searchResults: Track[]) => Promise<void>;
 
   // Controls
   toggleShuffle: () => void;

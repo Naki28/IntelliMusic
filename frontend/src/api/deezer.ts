@@ -94,6 +94,29 @@ export const DeezerAPI = {
     return api("/deezer/editorial/releases", true);
   },
 
+  // Radio basée sur un track (titres similaires)
+  async trackRadio(trackId: number): Promise<{ data: Track[] }> {
+    try {
+      return await api<{ data: Track[] }>(`/deezer/track/${trackId}/radio`, true);
+    } catch {
+      return { data: [] };
+    }
+  },
+
+  // Radio basée sur un artiste
+  async artistRadio(artistId: number): Promise<{ data: Track[] }> {
+    try {
+      return await api<{ data: Track[] }>(`/deezer/artist/${artistId}/radio`, true);
+    } catch {
+      return { data: [] };
+    }
+  },
+
+  // Info artiste
+  async artist(id: number): Promise<Artist> {
+    return api(`/deezer/artist/${id}`, true);
+  },
+
   // === Prefetch helpers — chauffe le cache, sans bloquer l'UI ===
   // Appelé depuis Home/Search après avoir reçu les listes — silencieux en cas d'erreur.
   prefetchAlbum(id: number) {
