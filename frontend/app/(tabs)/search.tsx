@@ -20,6 +20,7 @@ import { colors, fonts, radii, spacing } from "../../src/theme";
 import TrackRow from "../../src/components/TrackRow";
 import AlbumCard from "../../src/components/AlbumCard";
 import { usePlayer } from "../../src/context/PlayerContext";
+import { showToast } from "../../src/lib/toast";
 
 type Tab = "tracks" | "albums" | "artists" | "podcasts";
 
@@ -36,7 +37,16 @@ export default function SearchView() {
   const [podcasts, setPodcasts] = useState<ITunesPodcastResult[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const { playQueue } = usePlayer();
+  const { playQueue, addToQueue } = usePlayer();
+
+  // Long press sur un album → ajoute tous ses titres à la file
+  const handleAlbumLongPress = async (albumId: number) => {
+    try {
+      const a = await DeezerAPI.album(albumId);
+      const ts = (a.tracks?.data || []).map((t: any) => ({ ...t, album: { ...a }, artist: t.artist || a.artist }));
+      if (ts.length > 0) { addToQueue(ts); showToast(`Album ajouté à la file (${ts.length})`); }
+    } catch { showToast("Erreur lors de l'ajout"); }
+  };
 
   // Debounce de la recherche (350ms) — recherche en parallèle musique + podcasts
   useEffect(() => {
@@ -136,6 +146,7 @@ export default function SearchView() {
                 key={t.id}
                 track={t}
                 onPress={() => playQueue(tracks, i)}
+                onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
               />
             ))}
           {tab === "albums" && (
@@ -149,6 +160,7 @@ export default function SearchView() {
                     subtitle={a.artist?.name}
                     size={150}
                     onPress={() => router.push(`/album/${a.id}`)}
+                    onLongPress={() => handleAlbumLongPress(a.id)}
                   />
                 </View>
               ))}

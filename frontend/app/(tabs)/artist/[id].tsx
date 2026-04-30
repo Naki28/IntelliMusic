@@ -13,12 +13,13 @@ import AlbumCard from "../../../src/components/AlbumCard";
 import SectionHeader from "../../../src/components/SectionHeader";
 import { usePlayer } from "../../../src/context/PlayerContext";
 import { useLibrary } from "../../../src/context/LibraryContext";
+import { showToast } from "../../../src/lib/toast";
 import { colors, fonts, radii, spacing } from "../../../src/theme";
 
 export default function ArtistDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { playQueue } = usePlayer();
+  const { playQueue, addToQueue } = usePlayer();
   const { isArtistSaved, toggleArtist } = useLibrary();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -60,6 +61,18 @@ export default function ArtistDetail() {
     }
   }, [albums]);
 
+  // Long press sur une carte album → ajoute tous les titres à la file d'attente
+  const handleAlbumLongPress = async (albumId: number) => {
+    try {
+      const a = await DeezerAPI.album(albumId);
+      const ts = (a.tracks?.data || []).map((t: any) => ({ ...t, album: { ...a }, artist: t.artist || a.artist }));
+      if (ts.length > 0) {
+        addToQueue(ts);
+        showToast(`Album ajouté à la file (${ts.length})`);
+      }
+    } catch { showToast("Erreur lors de l'ajout"); }
+  };
+
   if (loading) return <SafeAreaView style={styles.center}><ActivityIndicator color={colors.primary} /></SafeAreaView>;
   if (!artist) return <SafeAreaView style={styles.center}><Text style={{color: colors.textPrimary, fontFamily: fonts.body}}>Artiste introuvable</Text></SafeAreaView>;
 
@@ -95,7 +108,15 @@ export default function ArtistDetail() {
 
           <Text style={styles.section}>Top titres</Text>
           <View style={{ paddingHorizontal: spacing.lg }}>
-            {tracks.slice(0, 10).map((t, i) => <TrackRow key={t.id} track={t} index={i} onPress={() => playQueue(tracks, i)} />)}
+            {tracks.slice(0, 10).map((t, i) => (
+              <TrackRow
+                key={t.id}
+                track={t}
+                index={i}
+                onPress={() => playQueue(tracks, i)}
+                onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+              />
+            ))}
           </View>
 
           {albums.length > 0 ? (
@@ -111,6 +132,7 @@ export default function ArtistDetail() {
                     subtitle={a.release_date?.slice(0, 4)}
                     size={140}
                     onPress={() => router.push(`/album/${a.id}`)}
+                    onLongPress={() => handleAlbumLongPress(a.id)}
                   />
                 ))}
               </ScrollView>

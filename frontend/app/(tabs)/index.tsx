@@ -17,6 +17,7 @@ import AlbumCard from "../../src/components/AlbumCard";
 import NewBadge, { isRecent } from "../../src/components/NewBadge";
 import { usePlayer } from "../../src/context/PlayerContext";
 import { useAuth } from "../../src/context/AuthContext";
+import { showToast } from "../../src/lib/toast";
 
 interface HomeReco { for_you_tracks: Track[]; trending_artists: Artist[]; new_releases: Album[]; }
 
@@ -32,7 +33,16 @@ export default function HomeView() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [reco, setReco] = useState<HomeReco | null>(null);
 
-  const { playQueue } = usePlayer();
+  const { playQueue, addToQueue } = usePlayer();
+
+  // Long press album → ajoute l'album entier à la file
+  const handleAlbumLongPress = async (albumId: number) => {
+    try {
+      const a = await DeezerAPI.album(albumId);
+      const ts = (a.tracks?.data || []).map((t: any) => ({ ...t, album: { ...a }, artist: t.artist || a.artist }));
+      if (ts.length > 0) { addToQueue(ts); showToast(`Album ajouté à la file (${ts.length})`); }
+    } catch { showToast("Erreur lors de l'ajout"); }
+  };
 
   const load = async () => {
     try {
@@ -111,7 +121,13 @@ export default function HomeView() {
         <SectionHeader overline={reco?.for_you_tracks?.length ? "Pour toi" : "Tendances"} title={reco?.for_you_tracks?.length ? "Suggestions personnalisées" : "Top Charts"} />
         <View>
           {personalTracks.slice(0, 8).map((t, i) => (
-            <TrackRow key={t.id} track={t} index={i} onPress={() => playQueue(personalTracks, i)} />
+            <TrackRow
+              key={t.id}
+              track={t}
+              index={i}
+              onPress={() => playQueue(personalTracks, i)}
+              onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+            />
           ))}
         </View>
 
@@ -129,6 +145,7 @@ export default function HomeView() {
                     subtitle={a.artist?.name}
                     size={150}
                     onPress={() => router.push(`/album/${a.id}`)}
+                    onLongPress={() => handleAlbumLongPress(a.id)}
                   />
                 </View>
               ))}

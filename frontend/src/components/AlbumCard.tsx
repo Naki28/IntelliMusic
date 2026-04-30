@@ -11,6 +11,7 @@ interface Props {
   size?: number;
   rounded?: boolean;
   onPress?: () => void;
+  onLongPress?: () => void;
 }
 
 export default function AlbumCard({
@@ -21,11 +22,14 @@ export default function AlbumCard({
   size = 150,
   rounded = false,
   onPress,
+  onLongPress,
 }: Props) {
   return (
     <TouchableOpacity
       testID={testID}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       activeOpacity={0.8}
       style={[styles.card, { width: size }]}
     >

@@ -1,7 +1,7 @@
-// PlayerView — Lecteur plein écran (titre ou stream radio/podcast)
-// Fix crash podcast: coerce isStream/isLive to boolean (était un object -> Fabric renderer crash)
-// Nom d'artiste cliquable -> navigation vers /artist/{id}
-import React from "react";
+// PlayerView — Lecteur plein écran (track, podcast ou radio live)
+// Nouveau layout : contrôles, puis volume, puis boutons queue + sleep timer.
+// Pour les podcasts : boutons précédent/suivant deviennent -15s / +30s.
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,6 +10,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { usePlayer } from "../src/context/PlayerContext";
 import { useFavorites } from "../src/context/FavoritesContext";
+import QueueModal from "../src/components/QueueModal";
+import SleepTimerModal from "../src/components/SleepTimerModal";
 import { colors, fonts, radii, spacing } from "../src/theme";
 
 function fmt(ms: number) {
@@ -18,12 +20,26 @@ function fmt(ms: number) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
+function fmtSleepRemaining(endAt: number | null): string {
+  if (!endAt) return "";
+  const rem = endAt - Date.now();
+  if (rem <= 0) return "";
+  const m = Math.ceil(rem / 60000);
+  return `${m}min`;
+}
+
 export default function PlayerView() {
   const router = useRouter();
-  const { mode, currentTrack, stream, isPlaying, isLoading, positionMs, durationMs, togglePlay, next, previous, seekTo } = usePlayer();
+  const {
+    mode, currentTrack, stream, isPlaying, isLoading, positionMs, durationMs,
+    volume, isShuffled, repeatMode, sleepTimerEndAt,
+    togglePlay, next, previous, seekTo, toggleShuffle, cycleRepeat, setVolume,
+  } = usePlayer();
   const { isFavorite, toggleFavorite } = useFavorites();
 
-  // ⚠ IMPORTANT : garantir des booléens (et non des objets) sinon Fabric crash
+  const [showQueue, setShowQueue] = useState(false);
+  const [showSleep, setShowSleep] = useState(false);
+
   const isStream = mode === "stream" && !!stream;
   const isPodcast = isStream && stream?.kind === "podcast";
   const isLive = isStream && stream?.kind !== "podcast";
@@ -50,11 +66,19 @@ export default function PlayerView() {
 
   const fav = currentTrack ? isFavorite(currentTrack.id) : false;
   const artistId = !isStream ? currentTrack?.artist?.id : null;
+  const podcastId = isPodcast ? stream?.podcastId : null;
 
+  // Navigation depuis le sous-titre
   const goToArtist = () => {
     if (artistId) {
-      router.back(); // ferme le modal
+      router.back();
       setTimeout(() => router.push(`/artist/${artistId}`), 120);
+    }
+  };
+  const goToPodcast = () => {
+    if (podcastId) {
+      router.back();
+      setTimeout(() => router.push(`/podcast/${podcastId}`), 120);
     }
   };
   const goToAlbum = () => {
@@ -64,6 +88,12 @@ export default function PlayerView() {
       setTimeout(() => router.push(`/album/${aid}`), 120);
     }
   };
+
+  // Couleurs/icônes repeat
+  const repeatIcon = repeatMode === "one" ? "repeat" : "repeat";
+  const repeatColor = repeatMode === "off" ? colors.textSecondary : colors.primary;
+
+  const sleepRem = fmtSleepRemaining(sleepTimerEndAt);
 
   return (
     <View style={styles.container} testID="player-view">
@@ -78,8 +108,8 @@ export default function PlayerView() {
           <View style={styles.headerCenter}>
             <Text style={styles.headerOverline}>{isLive ? "EN DIRECT" : isPodcast ? "PODCAST" : "EN LECTURE"}</Text>
             <TouchableOpacity
-              disabled={isStream || !currentTrack?.album?.id}
-              onPress={goToAlbum}
+              disabled={isLive || (!isPodcast && !currentTrack?.album?.id)}
+              onPress={isPodcast ? goToPodcast : goToAlbum}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Text style={styles.headerTitle} numberOfLines={1}>
@@ -101,7 +131,11 @@ export default function PlayerView() {
         <View style={styles.info}>
           <View style={{ flex: 1 }}>
             <Text style={styles.trackTitle} numberOfLines={2}>{title}</Text>
-            {artistId ? (
+            {isPodcast && podcastId ? (
+              <TouchableOpacity testID="player-podcast-link" onPress={goToPodcast} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Text style={[styles.trackArtist, styles.artistLink]}>{subtitle}</Text>
+              </TouchableOpacity>
+            ) : artistId ? (
               <TouchableOpacity testID="player-artist-link" onPress={goToArtist} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <Text style={[styles.trackArtist, styles.artistLink]}>{subtitle}</Text>
               </TouchableOpacity>
@@ -141,26 +175,96 @@ export default function PlayerView() {
           </View>
         )}
 
+        {/* Row 1 — Contrôles principaux */}
         <View style={styles.controls}>
-          <TouchableOpacity hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }} disabled={!!isStream}>
-            <Ionicons name="shuffle" size={24} color={isStream ? colors.textTertiary : colors.textSecondary} />
+          <TouchableOpacity
+            testID="player-shuffle"
+            onPress={toggleShuffle}
+            hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}
+            disabled={!!isStream}
+          >
+            <Ionicons name="shuffle" size={24} color={isStream ? colors.textTertiary : isShuffled ? colors.primary : colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity testID="player-prev" onPress={isPodcast ? () => seekTo(Math.max(0, positionMs - 15000)) : previous} disabled={!!isLive}>
-            <Ionicons name={isPodcast ? "play-back" : "play-skip-back"} size={36} color={isLive ? colors.textTertiary : colors.textPrimary} />
+            {isPodcast ? (
+              <View style={styles.skipBtn}>
+                <Ionicons name="play-back" size={26} color={colors.textPrimary} />
+                <Text style={styles.skipLabel}>15</Text>
+              </View>
+            ) : (
+              <Ionicons name="play-skip-back" size={36} color={isLive ? colors.textTertiary : colors.textPrimary} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity testID="player-play-pause" onPress={togglePlay} style={styles.playMain}>
             {isLoading ? <ActivityIndicator color="#fff" size="large" /> : <Ionicons name={isPlaying ? "pause" : "play"} size={36} color="#fff" />}
           </TouchableOpacity>
           <TouchableOpacity testID="player-next" onPress={isPodcast ? () => seekTo(positionMs + 30000) : next} disabled={!!isLive}>
-            <Ionicons name={isPodcast ? "play-forward" : "play-skip-forward"} size={36} color={isLive ? colors.textTertiary : colors.textPrimary} />
+            {isPodcast ? (
+              <View style={styles.skipBtn}>
+                <Ionicons name="play-forward" size={26} color={colors.textPrimary} />
+                <Text style={styles.skipLabel}>30</Text>
+              </View>
+            ) : (
+              <Ionicons name="play-skip-forward" size={36} color={isLive ? colors.textTertiary : colors.textPrimary} />
+            )}
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }} disabled={!!isStream}>
-            <Ionicons name="repeat" size={24} color={isStream ? colors.textTertiary : colors.textSecondary} />
+          <TouchableOpacity
+            testID="player-repeat"
+            onPress={cycleRepeat}
+            hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}
+            disabled={!!isStream}
+          >
+            <View>
+              <Ionicons name={repeatIcon} size={24} color={isStream ? colors.textTertiary : repeatColor} />
+              {repeatMode === "one" ? (
+                <Text style={styles.repeatOne}>1</Text>
+              ) : null}
+            </View>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>{isLive ? "Flux radio en direct" : isPodcast ? `Podcast · ${stream?.subtitle || ""}` : "Aperçu 30s · Deezer"}</Text>
+        {/* Row 2 — Volume */}
+        <View style={styles.volumeRow}>
+          <Ionicons name="volume-low" size={16} color={colors.textSecondary} />
+          <Slider
+            testID="player-volume"
+            style={styles.volumeSlider}
+            minimumValue={0}
+            maximumValue={1}
+            value={volume}
+            onValueChange={(v) => setVolume(v)}
+            minimumTrackTintColor={colors.textPrimary}
+            maximumTrackTintColor="rgba(255,255,255,0.15)"
+            thumbTintColor={colors.textPrimary}
+          />
+          <Ionicons name="volume-high" size={16} color={colors.textSecondary} />
+        </View>
+
+        {/* Row 3 — File d'attente + Minuteur */}
+        <View style={styles.secondaryRow}>
+          <TouchableOpacity
+            testID="player-queue"
+            onPress={() => setShowQueue(true)}
+            style={styles.secondaryBtn}
+          >
+            <Ionicons name="list" size={20} color={colors.textPrimary} />
+            <Text style={styles.secondaryLabel}>File d&apos;attente</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            testID="player-sleep-timer"
+            onPress={() => setShowSleep(true)}
+            style={[styles.secondaryBtn, sleepTimerEndAt && styles.secondaryBtnActive]}
+          >
+            <Ionicons name="moon" size={20} color={sleepTimerEndAt ? colors.primary : colors.textPrimary} />
+            <Text style={[styles.secondaryLabel, sleepTimerEndAt && { color: colors.primary }]}>
+              {sleepTimerEndAt ? sleepRem : "Minuteur"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
+
+      <QueueModal visible={showQueue} onClose={() => setShowQueue(false)} />
+      <SleepTimerModal visible={showSleep} onClose={() => setShowSleep(false)} />
     </View>
   );
 }
@@ -175,22 +279,30 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1, alignItems: "center", paddingHorizontal: spacing.md },
   headerOverline: { color: colors.accent, fontFamily: fonts.bodyBold, fontSize: 10, letterSpacing: 2 },
   headerTitle: { color: colors.textPrimary, fontFamily: fonts.bodyMed, fontSize: 13, marginTop: 2 },
-  coverWrap: { flex: 1, alignItems: "center", justifyContent: "center", marginVertical: spacing.lg },
-  cover: { width: 320, height: 320, borderRadius: radii.lg, backgroundColor: colors.surface },
+  coverWrap: { alignItems: "center", justifyContent: "center", marginVertical: spacing.md, flex: 1 },
+  cover: { width: 300, height: 300, borderRadius: radii.lg, backgroundColor: colors.surface },
   info: { flexDirection: "row", alignItems: "center", paddingTop: spacing.md },
-  trackTitle: { color: colors.textPrimary, fontFamily: fonts.heading, fontSize: 24, letterSpacing: -0.5 },
-  trackArtist: { color: colors.textSecondary, fontFamily: fonts.bodyMed, fontSize: 15, marginTop: 4 },
+  trackTitle: { color: colors.textPrimary, fontFamily: fonts.heading, fontSize: 22, letterSpacing: -0.5 },
+  trackArtist: { color: colors.textSecondary, fontFamily: fonts.bodyMed, fontSize: 14, marginTop: 4 },
   artistLink: { color: colors.textPrimary, textDecorationLine: "underline" },
-  sliderWrap: { marginTop: spacing.lg },
-  slider: { width: "100%", height: 36 },
+  sliderWrap: { marginTop: spacing.md },
+  slider: { width: "100%", height: 32 },
   timeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: -4 },
   time: { color: colors.textSecondary, fontFamily: fonts.body, fontSize: 12 },
-  liveBadge: { flexDirection: "row", alignItems: "center", marginTop: spacing.lg, alignSelf: "flex-start", backgroundColor: "rgba(229,56,59,0.15)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: radii.pill },
+  liveBadge: { flexDirection: "row", alignItems: "center", marginTop: spacing.md, alignSelf: "flex-start", backgroundColor: "rgba(229,56,59,0.15)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: radii.pill },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginRight: 6 },
   liveText: { color: colors.primary, fontFamily: fonts.bodyBold, fontSize: 11, letterSpacing: 1.5 },
-  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.lg, paddingHorizontal: spacing.sm },
-  playMain: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  footer: { color: colors.textTertiary, fontFamily: fonts.body, fontSize: 11, textAlign: "center", marginTop: spacing.lg, marginBottom: spacing.sm },
+  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.md, paddingHorizontal: spacing.sm },
+  playMain: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  skipBtn: { alignItems: "center", justifyContent: "center" },
+  skipLabel: { color: colors.textPrimary, fontFamily: fonts.bodyBold, fontSize: 10, marginTop: -2 },
+  repeatOne: { position: "absolute", top: -6, right: -8, color: colors.primary, fontFamily: fonts.bodyBold, fontSize: 10, backgroundColor: colors.background, borderRadius: 6, paddingHorizontal: 3 },
+  volumeRow: { flexDirection: "row", alignItems: "center", marginTop: spacing.sm, paddingHorizontal: spacing.sm },
+  volumeSlider: { flex: 1, height: 24, marginHorizontal: 8 },
+  secondaryRow: { flexDirection: "row", justifyContent: "space-around", marginTop: spacing.sm, paddingHorizontal: spacing.sm, marginBottom: spacing.sm },
+  secondaryBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 10, marginHorizontal: 6, borderRadius: radii.pill, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: colors.border },
+  secondaryBtnActive: { borderColor: colors.primary, backgroundColor: "rgba(229,56,59,0.08)" },
+  secondaryLabel: { color: colors.textPrimary, fontFamily: fonts.bodyMed, fontSize: 12, marginLeft: 6 },
   closeBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.pill },
   closeText: { color: "#fff", fontFamily: fonts.bodyBold },
 });

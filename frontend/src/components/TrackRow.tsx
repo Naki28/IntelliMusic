@@ -11,12 +11,13 @@ interface Props {
   track: Track;
   index?: number;
   onPress: () => void;
+  onLongPress?: () => void;
   // override (optionnel) — sinon détection auto via track.album.release_date
   showNewBadge?: boolean;
   newBadgeDays?: number;
 }
 
-export default function TrackRow({ track, index, onPress, showNewBadge, newBadgeDays = 7 }: Props) {
+export default function TrackRow({ track, index, onPress, onLongPress, showNewBadge, newBadgeDays = 7 }: Props) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(track.id);
 
@@ -28,6 +29,8 @@ export default function TrackRow({ track, index, onPress, showNewBadge, newBadge
     <TouchableOpacity
       testID={`track-row-${track.id}`}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       activeOpacity={0.7}
       style={styles.row}
     >

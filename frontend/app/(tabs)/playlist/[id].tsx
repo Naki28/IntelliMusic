@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { usePlaylists } from "../../../src/context/PlaylistsContext";
 import { usePlayer } from "../../../src/context/PlayerContext";
+import { showToast } from "../../../src/lib/toast";
 import TrackRow from "../../../src/components/TrackRow";
 import { colors, fonts, radii, spacing } from "../../../src/theme";
 
@@ -14,7 +15,7 @@ export default function PlaylistDetailView() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { playlists, removeTrack } = usePlaylists();
-  const { playQueue } = usePlayer();
+  const { playQueue, addToQueue } = usePlayer();
 
   const pl = playlists.find((p) => p.id === id);
   if (!pl) {
@@ -68,7 +69,12 @@ export default function PlaylistDetailView() {
             renderItem={({ item, index }) => (
               <View style={styles.trackWrap}>
                 <View style={{ flex: 1 }}>
-                  <TrackRow track={item} index={index} onPress={() => playQueue(pl.tracks, index)} />
+                  <TrackRow
+                    track={item}
+                    index={index}
+                    onPress={() => playQueue(pl.tracks, index)}
+                    onLongPress={() => { addToQueue([item]); showToast("Ajouté à la file"); }}
+                  />
                 </View>
                 <TouchableOpacity testID={`playlist-track-remove-${item.id}`} onPress={() => removeTrack(pl.id, item.id)} style={styles.removeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="remove-circle-outline" size={22} color={colors.textTertiary} />

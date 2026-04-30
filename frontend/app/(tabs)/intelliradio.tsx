@@ -45,7 +45,7 @@ function formatSlotLabel(slot: string): string {
 }
 
 export default function IntelliRadioView() {
-  const { playQueue, playStream, mode, stream, isLoading, isPlaying } = usePlayer();
+  const { playQueue, playStream, addToQueue, mode, stream, isLoading, isPlaying } = usePlayer();
   const [data, setData] = useState<RadioResponse | null>(null);
   const [schedule, setSchedule] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,7 +166,13 @@ export default function IntelliRadioView() {
           <>
             <Text style={styles.sectionTitle}>Ta playlist</Text>
             {data.tracks.slice(0, 12).map((t, i) => (
-              <TrackRow key={t.id} track={t} index={i} onPress={() => playQueue(data.tracks, i)} />
+              <TrackRow
+                key={t.id}
+                track={t}
+                index={i}
+                onPress={() => playQueue(data.tracks, i)}
+                onLongPress={() => { addToQueue([t]); }}
+              />
             ))}
           </>
         ) : null}

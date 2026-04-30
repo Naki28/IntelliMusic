@@ -9,13 +9,14 @@ import { usePlayer } from "../../src/context/PlayerContext";
 import { usePlaylists } from "../../src/context/PlaylistsContext";
 import { useLibrary } from "../../src/context/LibraryContext";
 import TrackRow from "../../src/components/TrackRow";
+import { showToast } from "../../src/lib/toast";
 import { colors, fonts, radii, spacing } from "../../src/theme";
 
 type Tab = "favorites" | "playlists" | "albums" | "artists";
 
 export default function LibraryView() {
   const { favorites } = useFavorites();
-  const { playQueue } = usePlayer();
+  const { playQueue, addToQueue } = usePlayer();
   const { playlists, create, remove } = usePlaylists();
   const { albums: savedAlbums, artists: savedArtists } = useLibrary();
   const router = useRouter();
@@ -77,7 +78,12 @@ export default function LibraryView() {
             data={favorites}
             keyExtractor={(it) => String(it.id)}
             renderItem={({ item, index }) => (
-              <TrackRow track={item} index={index} onPress={() => playQueue(favorites, index)} />
+              <TrackRow
+                track={item}
+                index={index}
+                onPress={() => playQueue(favorites, index)}
+                onLongPress={() => { addToQueue([item]); showToast("Ajouté à la file"); }}
+              />
             )}
             contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 220 }}
           />

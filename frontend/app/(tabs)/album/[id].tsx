@@ -10,12 +10,13 @@ import type { Album, Track } from "../../../src/types/music";
 import TrackRow from "../../../src/components/TrackRow";
 import { usePlayer } from "../../../src/context/PlayerContext";
 import { useLibrary } from "../../../src/context/LibraryContext";
+import { showToast } from "../../../src/lib/toast";
 import { colors, fonts, radii, spacing } from "../../../src/theme";
 
 export default function AlbumDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { playQueue } = usePlayer();
+  const { playQueue, addToQueue } = usePlayer();
   const { isAlbumSaved, toggleAlbum } = useLibrary();
   const [album, setAlbum] = useState<Album | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,14 @@ export default function AlbumDetail() {
                 <Ionicons name="play" size={18} color="#fff" />
                 <Text style={styles.playText}>Lire</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                testID="album-add-queue"
+                onPress={() => { addToQueue(tracks); showToast(`Album ajouté à la file (${tracks.length})`); }}
+                style={[styles.saveBtn, { marginRight: spacing.sm }]}
+              >
+                <Ionicons name="list" size={18} color={colors.textPrimary} />
+                <Text style={styles.saveText}>File</Text>
+              </TouchableOpacity>
               <TouchableOpacity testID="album-save" onPress={() => toggleAlbum(album)} style={[styles.saveBtn, saved && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                 <Ionicons name={saved ? "checkmark" : "add"} size={18} color={saved ? "#fff" : colors.textPrimary} />
                 <Text style={[styles.saveText, saved && { color: "#fff" }]}>{saved ? "Ajouté" : "Bibliothèque"}</Text>
@@ -64,7 +73,15 @@ export default function AlbumDetail() {
             </View>
           </View>
           <View style={{ paddingHorizontal: spacing.lg }}>
-            {tracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} onPress={() => playQueue(tracks, i)} />)}
+            {tracks.map((t, i) => (
+              <TrackRow
+                key={t.id}
+                track={t}
+                index={i}
+                onPress={() => playQueue(tracks, i)}
+                onLongPress={() => { addToQueue([t]); showToast("Ajouté à la file"); }}
+              />
+            ))}
           </View>
         </ScrollView>
       </SafeAreaView>
