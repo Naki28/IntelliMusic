@@ -554,6 +554,72 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setSleepTimerEndAt(Date.now() + minutes * 60 * 1000);
   }, []);
 
+  // ========== Smart Queue - Auto-fill avec tracks similaires ==========
+  const playWithSmartQueue = useCallback(async (track: Track, searchResults: Track[]) => {
+    // 1. Jouer immédiatement le track sélectionné
+    const initialQueue = [track];
+    const items = initialQueue.map<QueueItem>((t) => ({ uid: makeUid(), kind: "track", track: t }));
+    setQueue(items);
+    queueRef.current = items;
+    await loadAndPlayItem(items, 0);
+
+    // 2. En arrière-plan, récupérer des tracks similaires et enrichir la queue
+    (async () => {
+      try {
+        // Utiliser les résultats de recherche existants + radio du track
+        const existingIds = new Set([track.id]);
+        const smartTracks: Track[] = [];
+
+        // Ajouter d'autres tracks de la recherche (même artiste en priorité)
+        const sameArtist = searchResults.filter((t) => t.artist?.id === track.artist?.id && t.id !== track.id);
+        const otherTracks = searchResults.filter((t) => t.artist?.id !== track.artist?.id && t.id !== track.id);
+        
+        // Ajouter tracks du même artiste d'abord
+        for (const t of sameArtist.slice(0, 5)) {
+          if (!existingIds.has(t.id)) {
+            smartTracks.push(t);
+            existingIds.add(t.id);
+          }
+        }
+
+        // Essayer de récupérer la radio du track (similaires)
+        try {
+          const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/api/deezer/track/${track.id}/radio`);
+          if (response.ok) {
+            const data = await response.json();
+            const radioTracks = data.data || [];
+            for (const t of radioTracks.slice(0, 15)) {
+              if (!existingIds.has(t.id)) {
+                smartTracks.push(t);
+                existingIds.add(t.id);
+              }
+            }
+          }
+        } catch {}
+
+        // Ajouter les autres tracks de la recherche
+        for (const t of otherTracks.slice(0, 10)) {
+          if (!existingIds.has(t.id)) {
+            smartTracks.push(t);
+            existingIds.add(t.id);
+          }
+        }
+
+        // Ajouter à la queue si on a trouvé des tracks
+        if (smartTracks.length > 0) {
+          const newItems = smartTracks.map<QueueItem>((t) => ({ uid: makeUid(), kind: "track", track: t }));
+          setQueue((prev) => {
+            const merged = [...prev, ...newItems];
+            queueRef.current = merged;
+            return merged;
+          });
+        }
+      } catch (e) {
+        console.warn("Smart queue error:", e);
+      }
+    })();
+  }, [loadAndPlayItem]);
+
   // Auto-clean à la destruction
   useEffect(() => {
     return () => { soundRef.current?.unloadAsync().catch(() => {}); };
@@ -563,10 +629,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     <PlayerContext.Provider
       value={{
         mode, currentTrack, stream, queue, index, isPlaying, isLoading, isFullStreamMode,
-        positionMs, durationMs, volume, isShuffled, repeatMode, sleepTimerEndAt,
+        positionMs, durationMs, bufferedMs, volume, isShuffled, repeatMode, sleepTimerEndAt,
         setFullStreamMode, playQueue, playStream, togglePlay,
         next: () => next(false), previous, seekTo, stop,
         addToQueue, playNext, removeFromQueue, jumpTo, clearQueue,
+        playWithSmartQueue,
         toggleShuffle, cycleRepeat, setVolume, setSleepTimer,
       }}
     >
