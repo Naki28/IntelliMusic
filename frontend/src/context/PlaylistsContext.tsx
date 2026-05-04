@@ -19,6 +19,7 @@ interface PlaylistsState {
   create: (name: string) => Promise<Playlist | null>;
   remove: (id: string) => Promise<void>;
   addTrack: (playlistId: string, track: Track) => Promise<void>;
+  addTracks: (playlistId: string, tracks: Track[]) => Promise<void>;
   removeTrack: (playlistId: string, trackId: number) => Promise<void>;
 }
 
@@ -57,12 +58,24 @@ export function PlaylistsProvider({ children }: { children: React.ReactNode }) {
     await reload();
   }, [reload]);
 
+  const addTracks = useCallback(async (playlistId: string, tracks: Track[]) => {
+    // Ajout en bulk - on ajoute un par un côté API
+    for (const track of tracks) {
+      try {
+        await api(`/playlists/${playlistId}/tracks`, { method: "POST", body: JSON.stringify({ track }) });
+      } catch (e) {
+        console.warn("Erreur ajout track:", e);
+      }
+    }
+    await reload();
+  }, [reload]);
+
   const removeTrack = useCallback(async (playlistId: string, trackId: number) => {
     await api(`/playlists/${playlistId}/tracks/${trackId}`, { method: "DELETE" });
     await reload();
   }, [reload]);
 
-  return <Ctx.Provider value={{ playlists, reload, create, remove, addTrack, removeTrack }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ playlists, reload, create, remove, addTrack, addTracks, removeTrack }}>{children}</Ctx.Provider>;
 }
 
 export function usePlaylists() {

@@ -30,24 +30,16 @@ export default function ArtistDetail() {
     let mounted = true;
     (async () => {
       try {
-        // Top 10 + albums en parallèle (le cache rendra cela quasi-instantané si prefetch préalable)
-        const [top, albumsRes] = await Promise.all([
+        // Récupérer info artiste + Top 10 + albums en parallèle
+        const [artistInfo, top, albumsRes] = await Promise.all([
+          DeezerAPI.artist(Number(id)),
           DeezerAPI.artistTop(Number(id), 10),
           DeezerAPI.artistAlbums(Number(id), 25),
         ]);
         if (!mounted) return;
+        setArtist(artistInfo);
         setTracks(top.data || []);
         setAlbums(albumsRes.data || []);
-        if (top.data && top.data[0]?.artist) {
-          setArtist(top.data[0].artist as any);
-        } else {
-          // Fallback : récupérer info artiste directement
-          try {
-            const info = await DeezerAPI.album(Number(id));
-            // si /artist/{id} disponible côté backend, mais on garde safe
-            void info;
-          } catch {}
-        }
       } catch (e) { console.warn(e); }
       finally { if (mounted) setLoading(false); }
     })();

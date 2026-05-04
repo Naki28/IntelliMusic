@@ -520,6 +520,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
+    pointerEvents: "none",
   },
 
   // Quick access sections

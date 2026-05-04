@@ -207,10 +207,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Coupure auto à la durée Deezer officielle (évite outro YouTube)
+    // Coupure auto à la durée Deezer officielle (évite outro YouTube) — SEULEMENT en mode full stream
     const t = currentTrackRef.current;
     const officialDurMs = t?.duration ? t.duration * 1000 : 0;
-    if (t && officialDurMs > 0 && status.positionMillis && status.positionMillis >= officialDurMs - 250) {
+    if (isFullStreamMode && t && officialDurMs > 0 && status.positionMillis && status.positionMillis >= officialDurMs - 250) {
       if (nextRef.current) nextRef.current(true);
       return;
     }
@@ -227,7 +227,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (status.didJustFinish && nextRef.current) nextRef.current(true);
+    if (status.didJustFinish) {
+      // Avancer au prochain track de la queue
+      const q = queueRef.current;
+      const i = indexRef.current;
+      if (q.length > 0) {
+        // Appeler next directement avec les refs actuelles
+        const nextIdx = i + 1;
+        if (nextIdx < q.length) {
+          // Il y a un suivant
+          loadAndPlayItemRef.current?.(q, nextIdx);
+        } else if (repeatRef.current === "all") {
+          // Repeat all → retour au début
+          loadAndPlayItemRef.current?.(q, 0);
+        } else {
+          // Fin de la queue
+          setIsPlaying(false);
+        }
+      }
+    }
   }, [isFullStreamMode, saveProgress, volume]);
 
   const preloadedRef = useRef<Record<number, boolean>>({});
@@ -409,6 +427,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const nextRef = useRef(next);
   useEffect(() => { nextRef.current = next; }, [next]);
+
+  const loadAndPlayItemRef = useRef(loadAndPlayItem);
+  useEffect(() => { loadAndPlayItemRef.current = loadAndPlayItem; }, [loadAndPlayItem]);
 
   const previous = useCallback(async () => {
     const q = queueRef.current;
